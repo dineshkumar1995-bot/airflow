@@ -8,3 +8,5 @@ pyyaml
 packaging
 rich
 tabulate
+pymongo
+apache-airflow-providers-microsoft-winrm

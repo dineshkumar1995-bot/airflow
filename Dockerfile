@@ -33,10 +33,10 @@
 #                        all the build essentials. This makes the image
 #                        much smaller.
 #
-ARG AIRFLOW_VERSION="2.2.0.dev0"
-ARG AIRFLOW_EXTRAS="async,amazon,celery,cncf.kubernetes,docker,dask,elasticsearch,ftp,grpc,hashicorp,http,ldap,google,google_auth,microsoft.azure,mysql,pandas,postgres,redis,sendgrid,sftp,slack,ssh,statsd,virtualenv"
-ARG ADDITIONAL_AIRFLOW_EXTRAS=""
-ARG ADDITIONAL_PYTHON_DEPS=""
+ARG AIRFLOW_VERSION="2.1.0"
+ARG AIRFLOW_EXTRAS="async,amazon,celery,cncf.kubernetes,docker,dask,elasticsearch,ftp,grpc,hashicorp,http,ldap,google,google_auth,microsoft.azure,mysql,pandas,postgres,redis,sendgrid,sftp,slack,ssh,statsd,virtualenv,pywinrm"
+ARG ADDITIONAL_AIRFLOW_EXTRAS="pywinrm,apache-airflow-providers-microsoft-winrm"
+ARG ADDITIONAL_PYTHON_DEPS="pywinrm"
 
 ARG AIRFLOW_HOME=/opt/airflow
 ARG AIRFLOW_UID="50000"
@@ -45,11 +45,11 @@ ARG AIRFLOW_GID="50000"
 ARG PYTHON_BASE_IMAGE="python:3.6-slim-buster"
 
 ARG AIRFLOW_PIP_VERSION=21.2.4
-ARG AIRFLOW_IMAGE_REPOSITORY="https://github.com/apache/airflow"
+ARG AIRFLOW_IMAGE_REPOSITORY=/airflow
 
 # By default PIP has progress bar but you can disable it.
 ARG PIP_PROGRESS_BAR="on"
-
+#RUN pip install apache-airflow-backport-providers-microsoft-winrm
 ##############################################################################################
 # This is the build image where we build all dependencies
 ##############################################################################################
@@ -62,6 +62,8 @@ ENV PYTHON_BASE_IMAGE=${PYTHON_BASE_IMAGE} \
     LC_CTYPE=C.UTF-8 LC_MESSAGES=C.UTF-8
 
 # Install curl and gnupg2 - needed for many other installation steps
+#COPY requirements-python3.6.txt /requirements-python3.6.txt
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
            curl \
@@ -69,6 +71,7 @@ RUN apt-get update \
     && apt-get autoremove -yqq --purge \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+#UN  pip install apache-airflow-backport-providers-microsoft-winrm\
 
 ARG DEV_APT_DEPS="\
      apt-transport-https \
@@ -170,8 +173,8 @@ ARG UPGRADE_TO_NEWER_DEPENDENCIES="false"
 # By default we install latest airflow from PyPI so we do not need to copy sources of Airflow
 # but in case of breeze/CI builds we use latest sources and we override those
 # those SOURCES_FROM/TO with "." and "/opt/airflow" respectively
-ARG AIRFLOW_SOURCES_FROM="empty"
-ARG AIRFLOW_SOURCES_TO="/empty"
+ARG AIRFLOW_SOURCES_FROM="airflow"
+ARG AIRFLOW_SOURCES_TO="/airflow"
 
 ENV INSTALL_MYSQL_CLIENT=${INSTALL_MYSQL_CLIENT} \
     AIRFLOW_REPO=${AIRFLOW_REPO} \
@@ -417,7 +420,8 @@ RUN mkdir -pv /usr/share/man/man1 \
     && apt-get autoremove -yqq --purge \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-
+RUN pip install pywinrm 
+RUN pip install apache-airflow-providers-microsoft-winrm
 # Only copy install_mysql and install_pip_version.sh. We do not need any other scripts in the final image.
 COPY scripts/docker/install_mysql.sh scripts/docker/install_pip_version.sh /scripts/docker/
 
@@ -440,13 +444,15 @@ RUN chmod a+x /scripts/docker/install_mysql.sh && \
 COPY --chown=airflow:root --from=airflow-build-image /root/.local "${AIRFLOW_USER_HOME_DIR}/.local"
 COPY --chown=airflow:root scripts/in_container/prod/entrypoint_prod.sh /entrypoint
 COPY --chown=airflow:root scripts/in_container/prod/clean-logs.sh /clean-logs
-
+COPY  --chown=airflow:root airflow /airflow
 # Make /etc/passwd root-group-writeable so that user can be dynamically added by OpenShift
 # See https://github.com/apache/airflow/issues/9248
 
 RUN chmod a+x /entrypoint /clean-logs && \
     chmod g=u /etc/passwd && \
-    bash /scripts/docker/install_pip_version.sh
+    bash /scripts/docker/install_pip_version.sh \
+    chmod -R +x /airflow
+
 
 WORKDIR ${AIRFLOW_HOME}
 
@@ -479,6 +485,8 @@ LABEL org.apache.airflow.distro="debian" \
   org.opencontainers.image.title="Production Airflow Image" \
   org.opencontainers.image.description="Reference, production-ready Apache Airflow image"
 
+#COPY airflow /airflow
+#RUN chmod -R +x /airflow
 
 # See https://airflow.apache.org/docs/docker-stack/entrypoint.html#signal-propagation
 # to learn more about the way how signals are handled by the image
